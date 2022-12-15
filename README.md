@@ -1,5 +1,5 @@
 # ScillaNotarizer
-A scilla smart contract to notarize song lyrics
+A scilla smart contract to notarize song lyrics with its frondend in React.
 
 ## Notarizer.scilla
 The Scilla smart contract with two transitions - notarize() and checkDocument().
