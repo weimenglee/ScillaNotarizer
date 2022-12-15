@@ -29,7 +29,7 @@ class App extends React.Component {
       document : "" 
     };
   }
-
+ 
   //-------------------------------------
   //* Get the current account in ZilPay *
   //-------------------------------------
