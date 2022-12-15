@@ -1,0 +1,74 @@
+scilla_version 0
+(* Library definition *)
+
+library MyLibrary
+(*Constants in library*)
+
+let failure  = Int32 -1
+let document_existed    = Int32 1
+let document_notarized  = Int32 2
+let document_exists     = Int32 3
+let document_not_found  = Int32 4
+
+contract DocumentNotarizer (owner: ByStr20)
+(* owner is an immutable variable *)
+
+(* Mutable Field *)
+(* documents is now a Map of ByStr32 and BNum*)
+field documents: Map ByStr32 BNum = Emp ByStr32 BNum
+
+transition notarize (document : String)
+  is_owner = builtin eq owner _sender;
+  match is_owner with
+  | False =>
+      e = { _eventname : "notarize_fail"; 
+            code : failure; 
+            reason : "Only the owner can notarize"};
+      event e
+  | True =>
+      (* hash the string *)
+      hash = builtin sha256hash document;
+    
+      (* use the hash as the key *)
+      document_already_exists <- exists documents[hash];
+      match document_already_exists with
+      | True =>
+        e = { _eventname : "notarize_fail"; 
+              code : document_existed; 
+              reason : "Document already existed"};
+        event e
+      | False =>
+        blk <- &BLOCKNUMBER;
+
+        (* use the hash as the key *)
+        documents[hash] := blk;                           
+        e = { _eventname : "notarize_success"; 
+              code : document_notarized; 
+              reason : "Document notarized"};
+        event e
+      end
+  end
+end
+
+transition checkDocument (document: String)
+  (* hash the string given by user *)
+  hash = builtin sha256hash document;
+
+  (* use the hash as the key *)
+  doc_exists <- exists documents[hash];
+  match doc_exists with
+  | True =>
+    (* use the hash as the key *)
+    block_number <- documents[hash];
+    e = { _eventname : "checkDocument_success"; 
+          code : document_exists; 
+          reason : "Document exists!";
+          result : block_number };
+    event e
+  | False =>  
+    e = { _eventname : "checkDocument_fail"; 
+          code : document_not_found; 
+          reason : "Document does not exist" };
+    event e
+  end
+end
