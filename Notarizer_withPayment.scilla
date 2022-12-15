@@ -1,0 +1,129 @@
+scilla_version 0
+
+import IntUtils
+
+(* Library definition *)
+library MyLibrary
+(*Constants in library*)
+let failure  = Int32 -1
+let document_existed    = Int32 1
+let document_notarized  = Int32 2
+let document_exists     = Int32 3
+let document_not_found  = Int32 4
+
+(* Define a library function named one_msg to 
+   construct a list consisting of one message *)
+
+let one_msg =
+  fun (msg : Message) =>
+  let nil_msg = Nil {Message} in
+    Cons {Message} msg nil_msg
+
+contract DocumentNotarizer (owner: ByStr20)
+(* owner is an immutable variable *)
+
+(* Mutable Field *)
+field documents: Map String BNum = Emp String BNum
+
+transition notarize (document : String)
+  is_owner = builtin eq owner _sender;
+  match is_owner with
+  | False =>
+      e = { _eventname : "notarize_fail"; 
+            code : failure; 
+            reason : "Only the owner can notarize"};
+      event e
+  | True =>
+      document_already_exists <- exists documents[document];
+      match document_already_exists with
+      | True =>
+        e = { _eventname : "notarize_fail"; 
+              code : document_existed; 
+              reason : "Document already existed"};
+        event e
+      | False =>
+        blk <- &BLOCKNUMBER;
+        documents[document] := blk;
+        e = { _eventname : "notarize_success"; 
+              code : document_notarized; 
+              reason : "Document notarized"};
+        event e
+      end
+  end
+end
+
+(*---Procedure to check if excess amount has been sent---*)
+procedure refund_excess( expected_amount: Uint128 )
+  (* if _amount > expected_amount  *)
+  sent_more_than_expected = uint128_gt _amount expected_amount;
+
+  match sent_more_than_expected with
+  | True =>
+    (*---process refund---*)
+    (* refund = _amount - expected_amount *)
+    amount_to_refund = builtin sub _amount expected_amount;
+
+    (* construct the message *)
+    msg = { _tag : ""; 
+            _recipient: _sender; 
+            _amount: amount_to_refund };
+
+    (* insert the message into a list *)
+    msgs = one_msg msg;
+
+    (* send the message *)
+    send msgs
+  | False =>
+    accept
+  end
+end
+
+transition checkDocument (document: String)
+  (* Our expected fee *)
+
+  expected_amount = Uint128 1000000000000;   (* 1 Zil *)
+  (*  correct_amount_sent = builtin eq _amount expected_amount;*)
+
+  (* if _amount is greater than or equal to expected_amount  *)
+  correct_amount_sent = uint128_ge _amount expected_amount;
+   
+  match correct_amount_sent with
+  | False =>
+    e = { _eventname : "incorrect_amount"; 
+          code : failure; 
+          reason : "Incorrect amount sent"
+        };
+    event e
+  | True =>
+    (* Accept the payment *)
+    accept;
+    
+    (* transfer the expected amount to the owner *)
+    msg = { _tag : ""; 
+            _recipient: owner; 
+            _amount: expected_amount };
+    msgs = one_msg msg;
+    send msgs;
+
+    (* check if excess amount has been sent and process refund *)
+    refund_excess expected_amount;
+       
+    doc_exists <- exists documents[document];
+    match doc_exists with
+    | True =>
+      block_number <- documents[document];
+      e = { _eventname : "checkDocument_success"; 
+            code : document_exists; 
+            reason : "Document exists!";
+            result : block_number
+          };
+      event e
+    | False =>  
+      e = { _eventname : "checkDocument_fail"; 
+            code : document_not_found; 
+            reason : "Document does not exist" 
+          };
+      event e
+    end
+  end
+end
